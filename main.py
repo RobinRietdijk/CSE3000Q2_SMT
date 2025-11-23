@@ -4,11 +4,11 @@ import sys
 
 VALID_EXTENSIONS = [".singles"]
 
-def is_puzzle(path):
+def is_puzzle(path: str) -> bool:
     _, ext = os.path.splitext(path)
     return ext.lower() in VALID_EXTENSIONS
 
-def read_puzzle(path):
+def read_puzzle(path: str) -> list:
     with open(path, "r") as f:
         lines = input.readlines()
 
@@ -35,7 +35,7 @@ def read_puzzle(path):
         grid.append(row)
     return grid
 
-def read_file(path):
+def read_file(path: str) -> list:
     if not os.path.exists(path):
         sys.exit(f"Error: File does not exist at {path}")
     if not is_puzzle(path):
@@ -44,7 +44,7 @@ def read_file(path):
     puzzle = read_puzzle(path)
     return [(path, puzzle)]
 
-def read_folder(path):
+def read_folder(path: str) -> list:
     if not os.path.isdir(path):
         sys.exit(f"Error: Not a directory at {path}")
 
