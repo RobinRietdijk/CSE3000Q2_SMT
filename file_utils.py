@@ -62,3 +62,14 @@ def read_folder(path: str) -> list:
     if not puzzles:
         sys.exit(f"Error: No puzzle files found in {path}")
     return puzzles
+
+def write_file(fname: str, puzzle: list, seed: str) -> None:
+    os.makedirs("solutions", exist_ok=True)
+    fname += ".singlessol"
+    path = os.path.join("solutions", fname)
+
+    with open(path, "w") as file:
+        file.write(f"{len(puzzle)}\n\n")
+        for row in puzzle:
+            file.write(" ".join(map(str, row)) + "\n")
+        file.write(f"\n{seed}")
