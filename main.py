@@ -1,65 +1,18 @@
 import argparse
 import os
-import sys
+import z3solver
+from file_utils import read_file, read_folder
 
-VALID_EXTENSIONS = [".singles"]
+def write_file(fname: str, puzzle: list, seed: str) -> None:
+    os.makedirs("solutions", exist_ok=True)
+    fname += ".singlessol"
+    path = os.path.join("solutions", fname)
 
-def is_puzzle(path: str) -> bool:
-    _, ext = os.path.splitext(path)
-    return ext.lower() in VALID_EXTENSIONS
-
-def read_puzzle(path: str) -> list:
-    with open(path, "r") as f:
-        lines = input.readlines()
-
-    try:
-        n = int(lines[0])
-    except (ValueError, IndexError):
-        sys.exit(f"Error: First line must contain puzzle size in {path}")
-
-    if len(lines) < n + 2:
-        sys.exit(f"Error: Wrong puzzle format in {path}")
-
-    grid = []
-    for i in range(2, n + 2):
-        row_values = lines[i].split()
-
-        if len(row_values) != n:
-            sys.exit(f"Error: Row length mismatch in {path}")
-            
-        try:
-            row = [int(x) for x in row_values]
-        except ValueError:
-            sys.exit(f"Error: Non-integer value in {path}")
-
-        grid.append(row)
-    return grid
-
-def read_file(path: str) -> list:
-    if not os.path.exists(path):
-        sys.exit(f"Error: File does not exist at {path}")
-    if not is_puzzle(path):
-        sys.exit(f"Error: Not a puzzle file at {path}")
-
-    puzzle = read_puzzle(path)
-    return [(path, puzzle)]
-
-def read_folder(path: str) -> list:
-    if not os.path.isdir(path):
-        sys.exit(f"Error: Not a directory at {path}")
-
-    puzzles = []
-    for filename in os.listdir(path):
-        file = os.path.join(path, filename)
-
-        # Filter out subfolders
-        if not os.path.isfile(file):
-            continue
-
-        puzzles.extend(read_file(file))
-    if not puzzles:
-        sys.exit(f"Error: No puzzle files found in {path}")
-    return puzzles
+    with open(path, "w") as file:
+        file.write(f"{len(puzzle)}\n\n")
+        for row in puzzle:
+            file.write(" ".join(map(str, row)) + "\n")
+        file.write(f"\n{seed}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hitori solver using Z3")
@@ -72,3 +25,8 @@ if __name__ == "__main__":
         puzzles = read_file(args.file)
     else:
         puzzles = read_folder(args.folder)
+
+    for name, puzzle, seed in puzzles:
+        print(f"Solving {name}")
+        solution = z3solver.solve(puzzle)
+        write_file(name, solution, seed)
