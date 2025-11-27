@@ -11,7 +11,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.file:
-        puzzles = read_file(args.file)
+        puzzles = [read_file(args.file)]
     else:
         puzzles = read_folder(args.folder)
 
