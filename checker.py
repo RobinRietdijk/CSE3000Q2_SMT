@@ -1,5 +1,4 @@
 from collections import deque
-from file_utils import read_solution_dir, read_solution
 
 def check_puzzle(puzzle: list) -> bool:
     n = len(puzzle)
@@ -46,28 +45,3 @@ def check_puzzle(puzzle: list) -> bool:
                     queue.append((ni, nj))
 
     return len(visited) == num_white
-
-
-def check_file(path: str) -> tuple[str, bool]:
-    fname, grid, _ = read_solution(path)
-    result = check_puzzle(grid)
-    if result:
-        print(f"{fname}: Correct solution")
-    else:
-        print(f"{fname}: Incorrect solution")
-    return fname, result
-
-def check_folder(path: str) -> list[tuple[str, bool]]:
-    solutions = read_solution_dir(path)
-    all_results = []
-    for fname, grid, _ in solutions:
-        result = check_puzzle(grid)
-        if result:
-            print(f"{fname}: Correct solution")
-        else:
-            print(f"{fname}: Incorrect solution")
-        all_results.append((fname, result))
-    return all_results
-
-if __name__ == "__main__":
-    print(check_folder("solutions"))
