@@ -63,8 +63,7 @@ def _read_file(path: str, puzzles: bool, strict: bool) -> list[tuple[str, list[l
             return []
 
     grid, seed = _parse_file(path)
-    fname = os.path.splitext(os.path.basename(path))[0]
-    return [(fname, grid, seed)]
+    return [(path, grid, seed)]
 
 def _read_dir(path: str, puzzles: bool, strict: bool) -> list[tuple[str, list[list[int|str]], str|None]]:
     if not os.path.isdir(path):
@@ -101,14 +100,18 @@ def read_puzzle_dir(path: str, strict: bool = False) -> list[tuple[str, list[lis
 def read_solution_dir(path: str, strict: bool = False) -> list[tuple[str, list[list[int|str]], str|None]]:
     return _read_dir(path, False, strict)
 
-def write_file(fname: str, puzzle: list[list[int|str]], seed: str|None) -> None:
-    os.makedirs("solutions", exist_ok=True)
-    fname += ".singlessol"
-    path = os.path.join("solutions", fname)
-
+def write_file(path: str, puzzle: list[list[int|str]], seed: str|None, extra: str|None) -> None:
     with open(path, "w") as file:
         file.write(f"{len(puzzle)}\n\n")
         for row in puzzle:
             file.write(" ".join(map(str, row)) + "\n")
         if seed is not None:
             file.write(f"\n@{seed}")
+        if extra is not None:
+            for line in extra.splitlines():
+                file.write(f"\n#{line}")
+
+def append_comment(path: str, comment: str) -> None:
+    with open(path, "a") as file:
+        for line in comment.splitlines():
+            file.write(f"\n#{line}")
