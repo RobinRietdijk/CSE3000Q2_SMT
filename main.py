@@ -12,13 +12,14 @@ SOLUTIONS_FOLDER = os.path.abspath("solutions")
 SOLVERS = {
     "baseline": z3solver.solve_qf_ia,
     "bitvector": z3solver.solve_qf_bv,
-    "pattern_1": z3solver.solve_qf_ia_redundant_pattern1,
-    "pattern_2": z3solver.solve_qf_ia_redundant_pattern2,
-    "pattern_3": z3solver.solve_qf_ia_redundant_pattern3,
-    "corner_constraints": z3solver.solve_qf_ia_redundant_corners,
-    "atleast_1_white": z3solver.solve_qf_ia_redundant_atleast1white,
-    "white_neighbours": z3solver.solve_qf_ia_redundant_whiteneighbour,
-    "unique_values": z3solver.solve_qf_ia_redundant_unique_values
+    "pattern_1": z3solver.solve_qf_ia_p1,
+    "pattern_2": z3solver.solve_qf_ia_p2,
+    "pattern_3": z3solver.solve_qf_ia_p3,
+    "pattern_4": z3solver.solve_qf_ia_p4,
+    "pattern_5": z3solver.solve_qf_ia_p5,
+    "pattern_6": z3solver.solve_qf_ia_p6,
+    "pattern_7": z3solver.solve_qf_ia_p7,
+    "pattern_8": z3solver.solve_qf_ia_p8,
 }
 
 def _format_elapsed(elapsed: float) -> str:

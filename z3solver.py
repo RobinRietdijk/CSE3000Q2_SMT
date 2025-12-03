@@ -1,4 +1,6 @@
 import sys
+import z3solver_redundants
+import z3solver_patterns
 from z3 import *
 
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
@@ -16,6 +18,7 @@ def _add_constraint_uniquecells(s: Solver, colored: list[list[BoolRef]], grid: l
                 if (grid[j][i] == grid[k][i]):
                     s.add(Or(colored[j][i], colored[k][i]))
 
+# Alternate implemention of the uniquecells constraint by counting the values and asserting at most 1 value per column and row
 def _add_constraint_uniquecells2(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
     for i in range(n):
         row_values = {}
@@ -140,85 +143,6 @@ def _add_constraint_connectedwhite_QFBV(s: Solver, colored: list[list[BoolRef]],
                         Or(*conditions)
                     ))
 
-# Redundant constraint to make sure evert white cell has atleast one white neighbour
-def _add_r_constraint_whiteneighbours(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
-    for i in range(n):
-        for j in range(n):
-            neighbours = []
-            if i > 0:
-                neighbours.append(Not(colored[i-1][j]))
-            if j > 0:
-                neighbours.append(Not(colored[i][j-1]))
-            if i+1 < n:
-                neighbours.append(Not(colored[i+1][j]))
-            if j+1 < n:
-                neighbours.append(Not(colored[i][j+1]))
-            
-            if neighbours:
-                s.add(Implies(Not(colored[i][j]), Or(*neighbours)))
-def _add_r_constraint_leastwhites(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
-    for i in range(n):
-        rows = []
-        cols = []
-        for j in range(n):
-            rows.append(Not(colored[i][j]))
-            cols.append(Not(colored[j][i]))
-        s.add(Or(*rows))
-        s.add(Or(*cols))
-def _add_r_constraint_corners(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
-    s.add(Implies(colored[0][1], Not(colored[1][0])))
-    s.add(Implies(colored[1][0], Not(colored[0][1])))
-    s.add(Implies(colored[0][n-2], Not(colored[1][n-1])))
-    s.add(Implies(colored[1][n-1], Not(colored[0][n-2])))
-    s.add(Implies(colored[n-2][0], Not(colored[n-1][1])))
-    s.add(Implies(colored[n-1][1], Not(colored[n-2][0])))
-    s.add(Implies(colored[n-1][n-2], Not(colored[n-2][n-1])))
-    s.add(Implies(colored[n-2][n-1], Not(colored[n-1][n-2])))
-def _add_r_constraint_pattern1(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
-    for i in range(n):
-        for j in range(n):
-            if i < n-2:
-                if grid[i][j] == grid[i+1][j] and grid[i][j] == grid[i+2][j]:
-                    v = grid[i][j]
-                    s.add(colored[i][j])
-                    s.add(colored[i+2][j])
-                    
-                    for k in range(n):
-                        if k not in (i, i+1, i+2) and grid[k][j] == v:
-                            s.add(colored[k][j])
-            if j < n-2:
-                if grid[i][j] == grid[i][j+1] and grid[i][j] == grid[i][j+2]:
-                    v = grid[i][j]
-                    s.add(colored[i][j])
-                    s.add(colored[i][j+2])
-
-                    for k in range(n):
-                        if k not in (j, j+1, j+2) and grid[i][k] == v:
-                            s.add(colored[i][k])
-
-def _add_r_constraint_pattern2(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
-    if (grid[0][0] == grid[0][1] and grid[0][0] == grid[1][0]):
-        s.add(colored[0][0])
-    if (grid[0][n-1] == grid[0][n-2] and grid[0][n-1] == grid[1][n-1]):
-        s.add(colored[0][n-1])
-    if (grid[n-1][0] == grid[n-2][0] and grid[n-1][0] == grid[n-1][1]):
-        s.add(colored[n-1][0])
-    if (grid[n-1][n-1] == grid[n-1][n-2] and grid[n-1][n-1] == grid[n-2][n-1]):
-        s.add(colored[n-1][n-1])
-def _add_r_constraint_pattern3(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
-    if (grid[0][0] == grid[0][1] and grid[0][0] == grid[1][0] and grid[0][0] == grid[1][1]):
-        s.add(colored[0][0])
-        s.add(colored[1][1])
-    if (grid[0][n-1] == grid[0][n-2] and grid[0][n-1] == grid[1][n-1] and grid[0][n-1] == grid[1][n-2]):
-        s.add(colored[0][n-1])
-        s.add(colored[1][n-2])
-    if (grid[n-1][0] == grid[n-2][0] and grid[n-1][0] == grid[n-1][1] and grid[n-1][0] == grid[n-2][1]):
-        s.add(colored[n-1][0])
-        s.add(colored[n-2][1])
-    if (grid[n-1][n-1] == grid[n-1][n-2] and grid[n-1][n-1] == grid[n-2][n-1] and grid[n-1][n-1] == grid[n-2][n-2]):
-        s.add(colored[n-1][n-1])
-        s.add(colored[n-2][n-2])
-
 def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRef]]) -> None:
     if s.check() != sat:
         sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
@@ -277,62 +201,90 @@ def solve_qf_ia_redundant_unique_values(puzzle: list[list[int]]) -> tuple[list[l
     _add_constraint_connectedwhite_QFIA(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_redundant_pattern1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+
+def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA(s, colored, n)
-    _add_r_constraint_pattern1(s, colored, puzzle, n)
+    z3solver_patterns.gh_pattern_1(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_redundant_pattern2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+
+def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA(s, colored, n)
-    _add_r_constraint_pattern2(s, colored, puzzle, n)
+    z3solver_patterns.gh_pattern_2(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_redundant_pattern3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+
+def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA(s, colored, n)
-    _add_r_constraint_pattern3(s, colored, puzzle, n)
+    z3solver_patterns.gh_pattern_3(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_redundant_corners(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+
+def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA(s, colored, n)
-    _add_r_constraint_corners(s, colored, n)
+    z3solver_patterns.gh_pattern_4(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_redundant_atleast1white(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+
+def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA(s, colored, n)
-    _add_r_constraint_leastwhites(s, colored, n)
+    z3solver_patterns.gh_pattern_5(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_redundant_whiteneighbour(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+
+def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA(s, colored, n)
-    _add_r_constraint_whiteneighbours(s, colored, n)
+    z3solver_patterns.gh_pattern_6(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+
+def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    z3solver_patterns.gh_pattern_7(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+
+def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    z3solver_patterns.gh_pattern_8(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
