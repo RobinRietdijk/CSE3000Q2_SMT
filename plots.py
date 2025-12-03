@@ -27,6 +27,7 @@ def _plot_puzzleruntime(results):
             by_solver[solver][e["puzzle"]] = e["elapsed"]
 
         plt.figure()
+        plt.style.use(['science'])
         for index, solver in enumerate(solver_order):
             if solver not in by_solver:
                 continue
@@ -75,6 +76,7 @@ def _plot_puzzlestatistic(results, statistic, y_label):
             by_solver[solver][e["puzzle"]] = stat
 
         plt.figure()
+        plt.style.use(['science'])
         for index, solver in enumerate(solver_order):
             if solver not in by_solver:
                 continue
@@ -138,6 +140,7 @@ def _plot_avgruntime(results):
             continue
 
         plt.figure()
+        plt.style.use(['science'])
         x = list(range(len(solver_labels)))
         plt.bar(x, avg_per_solver)
         plt.xticks(x, solver_labels, rotation=45, ha='right')
@@ -180,6 +183,7 @@ def _plot_avgstatistic(results, statistic, y_label):
             continue
 
         plt.figure()
+        plt.style.use(['science'])
         x = list(range(len(solver_labels)))
         plt.bar(x, avg_per_solver)
         plt.xticks(x, solver_labels, rotation=45, ha='right')
@@ -222,6 +226,7 @@ def _plot_scalingavgruntime(results):
     solvers = sorted({solver for (_, solver) in sums.keys()})
 
     plt.figure()
+    plt.style.use(['science'])
     for index, solver in enumerate(solvers):
         z = 10 + (len(solvers)-index)
         x_sizes = []
@@ -262,6 +267,7 @@ def _plot_scalingavgstatistic(results, statistic, y_label, plot_name):
     solvers = sorted({solver for (_, solver) in sums.keys()})
 
     plt.figure()
+    plt.style.use(['science'])
     for index, solver in enumerate(solvers):
         z = 10 + (len(solver)-index)
         x_sizes = []
