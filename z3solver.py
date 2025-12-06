@@ -1,6 +1,6 @@
 import sys
-import z3solver_redundants
-import z3solver_patterns
+import z3solver_globals
+import z3solver_locals
 from z3 import *
 
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
@@ -219,18 +219,20 @@ def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRe
 
     m = s.model()
     sat_model = [[m.evaluate(colored[r][c]) == True for c in range(n)] for r in range(n)]
+    black_cells = 0
     solution = []
     for i in range(n):
         row = []
         for j in range(n):
             cell = str(puzzle[i][j])
             if sat_model[i][j]:
+                black_cells += 1
                 cell = f"{cell}B"
             row.append(cell)
         solution.append(row)
 
     st = s.statistics()
-    statistics = {
+    solver_statistics = {
         "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
         "rlimit": st.get_key_value("rlimit count") if "rlimit count" in st.keys() else 0,
         "bool_vars": st.get_key_value("mk bool var") if "mk bool var" in st.keys() else 0,
@@ -242,9 +244,11 @@ def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRe
         "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
         "time": st.get_key_value("time") if "time" in st.keys() else 0,
     }
-    return solution, statistics
+    return solution, solver_statistics, {"black_cells": black_cells}
 
-def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+''' IMPROVEMENTS '''
+
+def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -253,7 +257,7 @@ def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -262,7 +266,7 @@ def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[list[list[str]
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -271,7 +275,7 @@ def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[list[list[str
     _add_constraint_connectedwhite_QFIA_ranking_improved(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -280,7 +284,7 @@ def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[list[list[str]], 
     _add_constraint_connectedwhite_QFIA_tree(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -289,89 +293,210 @@ def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     _add_constraint_connectedwhite_QFBV_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+''' PUZZLE PATTERNS '''
+
+def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_1(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_1(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_2(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_2(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_3(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_3(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_4(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_4(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_5(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_5(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_6(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_6(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_7(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_7(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
     _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
-    z3solver_patterns.gh_pattern_8(s, colored, puzzle, n)
+    z3solver_locals.gh_pattern_8(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+''' OTHER REDUNDANT CONSTRAINTS '''
+
+def solve_r_white_neighbours(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.white_neighbours(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_atleast_whites(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.atleast_whites(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_atmost_blacks(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.atmost_blacks(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_corner_implications(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.corners_implications(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_pair_implications(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.pair_implications(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_between(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.between(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_force_double_edge(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_locals.force_double_edge(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_close_edge(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_locals.close_edge(s, colored, puzzle, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_r_bridges(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.bridges(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_all(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.between(s, colored, puzzle, n)
+    z3solver_globals.pair_implications(s, colored, puzzle, n)
+    z3solver_globals.corners_implications(s, colored, n)
+    z3solver_globals.atmost_blacks(s, colored, n)
+    z3solver_globals.atleast_whites(s, colored, n)
+    z3solver_globals.white_neighbours(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_best(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    z3solver_globals.between(s, colored, puzzle, n)
+    z3solver_globals.pair_implications(s, colored, puzzle, n)
+    z3solver_globals.corners_implications(s, colored, n)
     return _solve(s, n, puzzle, colored)
