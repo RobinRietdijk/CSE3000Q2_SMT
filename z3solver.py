@@ -1,7 +1,10 @@
 import sys
+import time
 import z3solver_globals
 import z3solver_locals
 from z3 import *
+
+TIMEOUT = 10000
 
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
 def _add_constraint_uniquecells_pairs(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
@@ -213,24 +216,104 @@ def _add_constraint_connectedwhite_QFBV_ranking(s: Solver, colored: list[list[Bo
             if conditions:
                 s.add(Implies(And(is_white[i][j], Not(is_root[i][j])), Or(*conditions)))
 
-def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRef]]) -> None:
-    if s.check() != sat:
-        sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
+def _add_constraint_connectedwhite_Boolean(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+    max_steps = n*n+1
+    root00 = Bool("root_0_0")
+    root01 = Bool("root_0_1")
+    s.add(Xor(root00, root01))
+    s.add(Implies(root00, Not(colored[0][0])))
+    s.add(Implies(root01, Not(colored[0][1])))
 
-    m = s.model()
-    sat_model = [[m.evaluate(colored[r][c]) == True for c in range(n)] for r in range(n)]
-    black_cells = 0
-    solution = []
+    visited = [[[Bool(f"visited_{k}_{i}_{j}") for j in range(n)] for i in range(n)] for k in range(max_steps+1)]
     for i in range(n):
-        row = []
         for j in range(n):
-            cell = str(puzzle[i][j])
-            if sat_model[i][j]:
-                black_cells += 1
-                cell = f"{cell}B"
-            row.append(cell)
-        solution.append(row)
+            if i == 0 and j == 0:
+                s.add(visited[0][0][0] == root00)
+            elif i == 0 and j == 1:
+                s.add(visited[0][0][1] == root01)
+            else:
+                s.add(visited[0][i][j] == False)
+    
+    for k in range(1, max_steps+1):
+        for i in range(n):
+            for j in range(n):
+                neighbours = []
+                if i > 0:
+                    neighbours.append(visited[k-1][i-1][j])
+                if j > 0:
+                    neighbours.append(visited[k-1][i][j-1])
+                if i < n-1:
+                    neighbours.append(visited[k-1][i+1][j])
+                if j < n-1:
+                    neighbours.append(visited[k-1][i][j+1])
+                
+                or_neighbours = Or(neighbours) if neighbours else False
+                can_visit = And(Not(colored[i][j]), Or(visited[k-1][i][j], or_neighbours))
 
+                s.add(Implies(visited[k][i][j], can_visit))
+                s.add(Implies(can_visit, visited[k][i][j]))
+    
+    for i in range(n):
+        for j in range(n):
+            s.add(Implies(Not(colored[i][j]), visited[max_steps][i][j]))    
+
+def _find_white_components(white_cells, n):
+    visited = [[False]*n for _ in range(n)]
+    components = []
+
+    for i in range(n):
+        for j in range(n):
+            if white_cells[i][j] and not visited[i][j]:
+                stack = [(i, j)]
+                component = []
+                visited[i][j] = True
+                while stack:
+                    x, y = stack.pop()
+                    component.append((x, y))
+                    for (nx, ny) in [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]:
+                        if 0 <= nx < n and 0 <= ny < n:
+                            if white_cells[nx][ny] and not visited[nx][ny]:
+                                visited[nx][ny] = True
+                                stack.append((nx, ny))
+                components.append(component)
+    return components
+
+def _add_constraint_connectivity_cut(s, component, colored, n):
+    boundary = set()
+    for (i, j) in component:
+        for (ni, nj) in [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]:
+            if 0 <= ni < n and 0 <= nj < n and (ni, nj) not in component:
+                boundary.add((ni, nj))
+    
+    s.add(Or(Or(colored[i][j] for (i, j) in component), Or(Not(colored[i][j]) for (i, j) in boundary)))
+
+
+def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRef]]) -> tuple[bool, list[list[str]]|None, dict|None, dict|None]:
+    s.set("timeout", TIMEOUT)
+    result = s.check()
+    if result == unsat:
+        sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
+    elif result == unknown:
+        solution = None
+        puzzle_statistics = None
+    else:
+        m = s.model()
+        sat_model = [[m.evaluate(colored[r][c]) == True for c in range(n)] for r in range(n)]
+        black_cells = 0
+        solution = []
+        for i in range(n):
+            row = []
+            for j in range(n):
+                cell = str(puzzle[i][j])
+                if sat_model[i][j]:
+                    black_cells += 1
+                    cell = f"{cell}B"
+                row.append(cell)
+            solution.append(row)
+        
+        puzzle_statistics = {
+            "black_cells": black_cells
+        }
     st = s.statistics()
     solver_statistics = {
         "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
@@ -244,11 +327,13 @@ def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRe
         "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
         "time": st.get_key_value("time") if "time" in st.keys() else 0,
     }
-    return solution, solver_statistics, {"black_cells": black_cells}
+
+    timed_out = solution is None
+    return timed_out, solution, solver_statistics, puzzle_statistics
 
 ''' IMPROVEMENTS '''
 
-def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -257,7 +342,7 @@ def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -266,7 +351,7 @@ def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[list[list[str]
     _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -275,7 +360,7 @@ def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[list[list[str
     _add_constraint_connectedwhite_QFIA_ranking_improved(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -284,7 +369,7 @@ def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[list[list[str]], 
     _add_constraint_connectedwhite_QFIA_tree(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_bv(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -293,9 +378,59 @@ def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     _add_constraint_connectedwhite_QFBV_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
+def solve_bool(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_Boolean(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_lazy_bool(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
+    start = time.perf_counter()
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    while True:
+        if start + time.perf_counter() >= TIMEOUT:
+            st = s.statistics()
+            solver_statistics = {
+                "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
+                "rlimit": st.get_key_value("rlimit count") if "rlimit count" in st.keys() else 0,
+                "bool_vars": st.get_key_value("mk bool var") if "mk bool var" in st.keys() else 0,
+                "clauses": st.get_key_value("mk clause") if "mk clause" in st.keys() else 0,
+                "bin_clauses": st.get_key_value("mk clause binary") if "mk clause binary" in st.keys() else 0,
+                "conflicts": st.get_key_value("conflicts") if "conflicts" in st.keys() else 0,
+                "decisions": st.get_key_value("decisions") if "decisions" in st.keys() else 0,
+                "memory": st.get_key_value("memory") if "memory" in st.keys() else 0,
+                "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
+                "time": st.get_key_value("time") if "time" in st.keys() else 0,
+            }
+            
+            return False, None, solver_statistics, None
+        
+        result = s.check()
+        if result != sat:
+            sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
+
+        m = s.model()
+        sat_model = [[m.evaluate(colored[r][c]) == False for c in range(n)] for r in range(n)]
+
+        components = _find_white_components(sat_model, n)
+        if len(components) <= 1:
+            break
+        
+        component = components[1]
+        _add_constraint_connectivity_cut(s, component, colored, n)
+
+    return _solve(s, n, puzzle, colored)
+
 ''' PUZZLE PATTERNS '''
 
-def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -306,7 +441,7 @@ def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -317,7 +452,7 @@ def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -328,7 +463,7 @@ def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -339,7 +474,7 @@ def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -350,7 +485,7 @@ def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -361,7 +496,7 @@ def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -372,7 +507,7 @@ def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
     return _solve(s, n, puzzle, colored)
 
 
-def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -384,7 +519,7 @@ def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict
 
 ''' OTHER REDUNDANT CONSTRAINTS '''
 
-def solve_r_white_neighbours(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_white_neighbours(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -394,7 +529,7 @@ def solve_r_white_neighbours(puzzle: list[list[int]]) -> tuple[list[list[str]], 
     z3solver_globals.white_neighbours(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_atleast_whites(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_atleast_whites(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -404,7 +539,7 @@ def solve_r_atleast_whites(puzzle: list[list[int]]) -> tuple[list[list[str]], di
     z3solver_globals.atleast_whites(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_atmost_blacks(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_atmost_blacks(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -414,7 +549,7 @@ def solve_r_atmost_blacks(puzzle: list[list[int]]) -> tuple[list[list[str]], dic
     z3solver_globals.atmost_blacks(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_corner_implications(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_corner_implications(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -424,7 +559,7 @@ def solve_r_corner_implications(puzzle: list[list[int]]) -> tuple[list[list[str]
     z3solver_globals.corners_implications(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_pair_implications(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_pair_implications(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -434,7 +569,7 @@ def solve_r_pair_implications(puzzle: list[list[int]]) -> tuple[list[list[str]],
     z3solver_globals.pair_implications(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_between(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_between(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -444,7 +579,7 @@ def solve_r_between(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dic
     z3solver_globals.between(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_force_double_edge(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_force_double_edge(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -454,7 +589,7 @@ def solve_r_force_double_edge(puzzle: list[list[int]]) -> tuple[list[list[str]],
     z3solver_locals.force_double_edge(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_close_edge(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_close_edge(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -464,7 +599,7 @@ def solve_r_close_edge(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, 
     z3solver_locals.close_edge(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_r_bridges(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_r_bridges(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -474,7 +609,7 @@ def solve_r_bridges(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dic
     z3solver_globals.bridges(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_all(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_all(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
@@ -489,7 +624,7 @@ def solve_all(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
     z3solver_globals.white_neighbours(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
-def solve_best(puzzle: list[list[int]]) -> tuple[list[list[str]], dict, dict]:
+def solve_best(puzzle: list[list[int]]) -> tuple[bool, list[list[str]]|None, dict, dict|None]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
