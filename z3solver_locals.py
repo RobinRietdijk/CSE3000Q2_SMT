@@ -18,7 +18,7 @@ def white_neighbours(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
                 s.add(Implies(Not(colored[i][j]), Or(*neighbours)))
 
 # Redundant constraint for corners
-def corners_implications(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+def corner_close(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
     s.add(Implies(colored[0][1], Not(colored[1][0])))
     s.add(Implies(colored[1][0], Not(colored[0][1])))
     s.add(Implies(colored[0][n-2], Not(colored[1][n-1])))
@@ -180,4 +180,37 @@ def force_double_edge(s: Solver, colored: list[list[BoolRef]], grid: list[list[i
             s.add(Implies(And(colored[i][0], colored[i+2][0]), Not(colored[i+1][1])))
             s.add(Implies(And(colored[i][n-1], colored[i+2][n-1]), Not(colored[i+1][n-2])))
 
-                
+# Implementation of pattern 8 according to chapter 3.3 of Hitori Solver
+def border_close(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
+    for i in range(n):
+        if grid[0][i] == grid[1][i]:
+            if i > 1:
+                if grid[0][i] == grid[1][i-1]:
+                    s.add(Implies(colored[0][i-2], colored[1][i]))
+            if i < n-2:
+                if grid[0][i] == grid[1][i+1]:
+                    s.add(Implies(colored[0][i+2], colored[1][i]))
+         
+        if grid[n-1][i] == grid[n-2][i]:
+            if i > 1:
+                if grid[n-1][i] == grid[n-2][i-1]:
+                    s.add(Implies(colored[n-1][i-2], colored[n-2][i]))
+            if i < n-2:
+                if grid[n-1][i] == grid[n-2][i+1]:
+                    s.add(Implies(colored[n-1][i+2], colored[n-2][i]))
+        
+        if grid[i][0] == grid[i][1]:
+            if i > 1:
+                if grid[i][0] == grid[i-1][1]:
+                    s.add(Implies(colored[i-2][0], colored[i][1]))
+            if i < n-2:
+                if grid[i][0] == grid[i+1][1]:
+                    s.add(Implies(colored[i+2][0], colored[i][1]))
+        
+        if grid[i][n-1] == grid[i][n-2]:
+            if i > 1:
+                if grid[i][n-1] == grid[i-1][n-2]:
+                    s.add(Implies(colored[i-2][n-1], colored[i][n-2]))
+            if i < n-2:
+                if grid[i][n-1] == grid[i+1][n-2]:
+                    s.add(Implies(colored[i+2][n-1], colored[i][n-2]))
