@@ -24,3 +24,23 @@
 10 11 11 11 19 2 21 4 22 19 6 18 15 4 8 13 7 3 17 12 1 7
 
 @154846611828839633435426467248706839581
+# ~[pairs]: 51
+# ~[triplets]: 2
+# ~[isolated]: 157
+# ~[z_pairs]: 0.08141983567550959
+# ~[z_triplets]: 1.0987798110498443
+# ~[z_isolated]: -0.724401475487546
+# ~[mean_pairs]: 50.53
+# ~[std_pairs]: 5.772549110429744
+# ~[mean_triplets]: 1
+# ~[std_triplets]: 0.9101004495564368
+# ~[mean_isolated]: 161.86
+# ~[std_isolated]: 6.708986887042264
+# ~[entropy]: 3.741974292633856
+# ~[z_entropy]: 1.148517098516568
+# ~[mean_entropy]: 3.70167028756023
+# ~[std_entropy]: 0.03509221162286849
+# ~[cross_duplicates]: 121
+# ~[z_cross_duplicates]: 0.011414039602151087
+# ~[mean_cross_duplicates]: 120.92
+# ~[std_cross_duplicates]: 7.008912075696804
