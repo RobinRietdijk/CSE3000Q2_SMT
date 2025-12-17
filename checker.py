@@ -1,7 +1,15 @@
 from collections import deque
 
-def check_puzzle(puzzle: list) -> bool:
-    n = len(puzzle)
+def check_puzzle(solution: list) -> bool:
+    """ Checks the validity of a solution
+
+    Args:
+        solution (list): A solution read from a solution file
+
+    Returns:
+        bool: True if the solution is valid, False otherwise
+    """
+    n = len(solution)
     rows = [set() for _ in range(n)]
     cols = [set() for _ in range(n)]
     num_white = 0
@@ -9,18 +17,21 @@ def check_puzzle(puzzle: list) -> bool:
 
     for i in range(n):
         for j in range(n):
-            val = puzzle[i][j]
+            val = solution[i][j]
+            # Neighbour check
             if val.endswith("B"):
                 if i+1 < n:
-                    if puzzle[i+1][j].endswith("B"):
+                    if solution[i+1][j].endswith("B"):
                         return False
                 if j+1 < n:
-                    if puzzle[i][j+1].endswith("B"):
+                    if solution[i][j+1].endswith("B"):
                         return False
                 continue
+            # Gather a root for the connectivity check
             if start is None:
                 start = (i, j)
 
+            # Uniqueness check
             if val in rows[i] or val in cols[j]:
                 return False
             rows[i].add(val)
@@ -30,15 +41,15 @@ def check_puzzle(puzzle: list) -> bool:
     if num_white == 0 or start is None:
         return False
 
+    # Connectivity check
     visited = set([start])
     queue = deque([start])
-
     while queue:
         i, j = queue.popleft()
         for di, dj in ((0, 1), (1, 0), (0, -1), (-1, 0)):
             ni, nj = i+di, j+dj
             if 0 <= ni < n and 0 <= nj < n:
-                if puzzle[ni][nj].endswith("B"):
+                if solution[ni][nj].endswith("B"):
                     continue
                 if (ni, nj) not in visited:
                     visited.add((ni, nj))
