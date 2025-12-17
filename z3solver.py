@@ -117,14 +117,13 @@ def _solve_lazy(s: Solver, colored: list, n: int) -> None:
         _add_constraint_connectivity_cut(s, component, colored, n)
 
 
-def _init_solver(n: int, seed: int, vars: int, rules: int) -> tuple[Solver, list]:
+def _init_solver(n: int, seed: int) -> tuple[Solver, list]:
     s = Solver()
     s.set("timeout", TIMEOUT)
     if seed:
         s.set("random_seed", seed)
         
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    vars += 1 for i in range 
     return s, colored
 
 
