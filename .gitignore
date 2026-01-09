@@ -3,5 +3,4 @@ __pycache__
 venv
 solutions
 plots
-extra_puzzles
-difficult*
+puzzles*
