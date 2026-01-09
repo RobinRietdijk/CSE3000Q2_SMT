@@ -146,7 +146,7 @@ def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int, encoding_size: d
                 "encoding_size": encoding_size
             }
             
-            return False, None, solver_statistics, None
+            return True, None, solver_statistics, None
         
         result = s.check()
         # No result was able to be found
@@ -154,7 +154,7 @@ def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int, encoding_size: d
             sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
 
         m = s.model()
-        sat_model = [[m.evaluate(colored[r][c]) == False for c in range(n)] for r in range(n)]
+        sat_model = [[z3.is_false(m.evaluate(colored[r][c])) for c in range(n)] for r in range(n)]
 
         # Find all white components based on this solution iteration
         components = _find_white_components(sat_model, n)
@@ -180,6 +180,7 @@ def _init_solver(n: int, seed: int|None) -> tuple[Solver, list, dict]:
     s = Solver()
     encoding_size = { "int_vars": 0, "bool_vars": 0, "bv_vars": 0 }
     s.set("timeout", TIMEOUT)
+    s.set("threads", 1)
     # If no seed was given, do not add a seed
     if seed:
         s.set("random_seed", seed)
@@ -208,7 +209,7 @@ def solve(base: Callable, constraints: list, puzzle: list, seed: int|None = None
         constraint(s, colored, puzzle, n, encoding_size)
     
     if base == lazy:
-        _solve_lazy(s, colored, puzzle, n, encoding_size)
+        return _solve_lazy(s, colored, puzzle, n, encoding_size)
     return _solve(s, colored, puzzle, n, encoding_size)
 
 
