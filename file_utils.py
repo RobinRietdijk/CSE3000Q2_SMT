@@ -243,3 +243,19 @@ def read_csv(path: str) -> dict:
             results.append(_unflatten_dict(casted))
 
     return results
+
+def read_csv_folder(path: str, strict: bool, recursive: bool) -> list:
+    if not os.path.isdir(path):
+        sys.exit(f"Error: Not a directory at {path}")
+
+    csvs = []
+    for filename in os.listdir(path):
+        file = os.path.join(path, filename)
+
+        if not os.path.isfile(file):
+            if recursive:
+                csvs.extend(read_csv_folder(file, strict, recursive))
+            continue
+
+        csvs.extend(read_csv(file))
+    return csvs
