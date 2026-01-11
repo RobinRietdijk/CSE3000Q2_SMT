@@ -55,15 +55,26 @@ colors = [
 LINE_STYLES = ["-", "--", "-.", ":"]
 
 def _summarize_runtime_scaling(results) -> list:
-    grouped = {}
+    by_puzzle = {}
     for r in results:
-        key = (r["solver"], r["size"])
-        if key not in grouped:
-            grouped[key] = []
-        grouped[key].append(r["statistics"]["runtime"])
+        key = (r["solver"], r["size"], r["puzzle"])
+        if key not in by_puzzle:
+            by_puzzle[key] = []
+        by_puzzle[key].append(r["statistics"]["runtime"])
+
+    per_puzzle = []
+    for (solver, size, _), times in by_puzzle.items():
+        per_puzzle.append((solver, size, np.median(times)))
+
+    by_size = {}
+    for (solver, size, runtime) in per_puzzle:
+        key = (solver, size)
+        if key not in by_size:
+            by_size[key] = []
+        by_size[key].append(runtime)
 
     summary = []
-    for (solver, size), runtimes in grouped.items():
+    for (solver, size), runtimes in by_size.items():
         times = np.array(runtimes)
         summary.append({
             "solver": solver,
@@ -79,22 +90,36 @@ def _summarize_runtime_scaling(results) -> list:
     return sorted(summary, key=lambda x: (x["size"], x["solver"]))
 
 def _summarize_encoding_scaling(results):
-    grouped = {}
+    by_puzzle = {}
     for r in results:
+        key = (r["solver"], r["size"], r["puzzle"])
+        if key not in by_puzzle:
+            by_puzzle[key] = {"variables": [], "assertions": []}
+        
+        encoding_size = r["statistics"]["encoding_size"]
+        total_variables = sum(v for k, v in encoding_size.items() if k != "assertions")
+        by_puzzle[key]["variables"].append(total_variables)
+        by_puzzle[key]["assertions"].append(encoding_size["assertions"])
+
+    per_puzzle = []
+    for (solver, size, _), values in by_puzzle.items():
+        per_puzzle.append((solver, size, float(np.median(values["variables"])), float(np.median(values["assertions"]))))
+
+    by_size = {}
+    for (solver, size, variables, assertions) in per_puzzle:
         key = (r["solver"], r["size"])
-        if key not in grouped:
-            grouped[key] = []
-        vars = sum([r["statistics"]["encoding_size"][key] for key in r["statistics"]["encoding_size"].keys() if key != "assertions"])
-        grouped[key].append((vars, r["statistics"]["encoding_size"]["assertions"]))
+        if key not in by_size:
+            by_size[key] = {"variables": [], "assertions": []}
+        by_size[key]["variables"].append(variables)
+        by_size[key]["assertions"].append(assertions)
 
     summary = []
-    for (solver, size), values in grouped.items():
-        variables, assertions = zip(*values)
+    for (solver, size), values in by_size.items():
         summary.append({
             "solver": solver,
             "size": size,
-            "variables": int(np.median(variables)),
-            "assertions": int(np.median(assertions)),
+            "variables": np.median(values["variables"]),
+            "assertions": np.median(values["assertions"]),
         })
 
     return sorted(summary, key=lambda x: (x["size"], x["solver"]))
@@ -216,9 +241,10 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
                 continue
             med = by_solver_size[s][n]["median"]
             speedup = (base_med / med) if med > 0 else float("inf")
-            print(f"  {s:>12}: median={med:.6g}s  speedup={speedup:.3g}x")
+            slowdown = (med / base_med) if med > 0 else float("inf")
+            print(f"  {s:>12}: median={med:.6g}s | speedup={speedup:.3g}x | slowdown={slowdown:.3g}x")
 
-    print("\n-- Relative variability: (q3 - q1) --")
+    print("\n-- Relative variability per size: (q3 - q1) --")
     for n in report_sizes:
         print(f"\nSize n={n}:")
         for s in solvers:
@@ -228,6 +254,30 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
             med, q1, q3 = row["median"], row["q1"], row["q3"]
             rel_iqr = ((q3 - q1) / med) if med > 0 else float("nan")
             print(f"  {s:>12}: rel_IQR={rel_iqr:.3g}  (q1={q1:.6g}, q3={q3:.6g})")
+    
+    print("\n-- Average relative variability: (q3 - q1) --")
+    avgs = {}
+    counts = {}
+    for n in sizes:
+        for s in solvers:
+            if s not in avgs:
+                avgs[s] = 0
+                counts[s] = 0
+            if n not in by_solver_size[s]:
+                continue
+            if by_solver_size[s][n]["median"] > 10:
+                continue
+
+            row = by_solver_size[s][n]
+            med, q1, q3 = row["median"], row["q1"], row["q3"]
+            rel_iqr = (q3 - q1) / med if med > 0 else float("nan")
+            avgs[s] += rel_iqr
+            counts[s] += 1
+
+    for s in avgs:
+        if counts[s] > 0:
+            avgs[s] /= counts[s]
+        print(f"{s:>12}: avg_rel_IQR={avgs[s]:.3g} (n={counts[s]})")
 
     print("\n-- Scaling slope: fit log(median_runtime) = a*n + b --")
     for s in solvers:
@@ -255,10 +305,6 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
         print(f"  {s:>12}: a={a:.4g}  b={b:.4g}  R^2={r2:.3g}")
 
 def print_encoding_text_stats(results: list, report_sizes: list[int] | None = None) -> None:
-    """
-    Optional: prints encoding size (vars+assertions) at selected sizes, per solver.
-    Since you sum them in the plot, this prints the same scalar, plus components.
-    """
     enc_summary = _summarize_encoding_scaling(results)
     by_solver_size = defaultdict(dict)
     solvers = sorted(set(r["solver"] for r in enc_summary))
