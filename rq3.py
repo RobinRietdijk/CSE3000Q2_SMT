@@ -1,12 +1,19 @@
 
 import math
 import numpy as np
-import os
 from collections import Counter
 from file_utils import read_puzzle
 from scipy.stats import mannwhitneyu, false_discovery_control, spearmanr
 
 def _flatten_results(results: list) -> list:
+    """ Flatten the results from multiple runs
+
+    Args:
+        results (list): Results from the experiments
+
+    Returns:
+        list: A flattened list of results
+    """
     by_puzzle = {}
 
     for r in results:
@@ -41,6 +48,16 @@ def _flatten_results(results: list) -> list:
     return flattened
 
 def _build_groups(results: list, runtime_outliers: list, effort_outliers: list) -> tuple:
+    """ Build groups of puzzles based on the outlier sets
+
+    Args:
+        results (list): Results from the experiments
+        runtime_outliers (list): Outliers gathered from the runtime filtering method
+        effort_outliers (list): Outliers gathered from the effort filtering method
+
+    Returns:
+        tuple: 4 sets based on the outliers from each method
+    """
     runtime_puzzles = {r["puzzle"] for r in runtime_outliers}
     effort_puzzles = {r["puzzle"] for r in effort_outliers}
 
@@ -65,7 +82,15 @@ def _build_groups(results: list, runtime_outliers: list, effort_outliers: list) 
         
     return runtime_only, effort_only, neither, both
 
-def _group_by_size(flattened_results):
+def _group_by_size(flattened_results: list) -> dict:
+    """ Group the results by puzzle size
+
+    Args:
+        flattened_results (list): flattened list of results from the experiments
+
+    Returns:
+        dict: results grouped by puzzle size
+    """
     groups = {}
     for r in flattened_results:
         key = r["size"]
@@ -75,12 +100,30 @@ def _group_by_size(flattened_results):
     return groups
 
 def _iqr_whiskers(x: list, k: float = 1.5) -> tuple:
+    """ Calculate the IQR whiskers of a list
+
+    Args:
+        x (list): List of which to calculate the whiskers are for
+        k (float, optional): Scalar for the whiskers. Defaults to 1.5.
+
+    Returns:
+        tuple: bottom and upper whiskers of the list
+    """
     q1 = np.percentile(x, 25)
     q3 = np.percentile(x, 75)
     iqr = q3-q1
     return q1-k*iqr, q3+k*iqr
 
 def _effort_score(r: dict, weights: dict) -> float:
+    """ Calculates an effort based score for the results
+
+    Args:
+        r (dict): Results from the experiments
+        weights (dict): Dict of weights for the effort statistics
+
+    Returns:
+        float: Effort score which is a weighted sum of statistics
+    """
     return (
         weights["decisions"]*math.log1p(r["statistics"]["decisions"])+
         weights["conflicts"]*math.log1p(r["statistics"]["conflicts"])+
@@ -88,6 +131,16 @@ def _effort_score(r: dict, weights: dict) -> float:
     )
 
 def _find_effort_outliers(results: list, weights: dict, k: float) -> list:
+    """ Finds the outliers using the effort based method
+
+    Args:
+        results (list): Results from the experiments
+        weights (dict): Weights to be used for the effort score
+        k (float): Scalar to be used for the IQR whiskers
+
+    Returns:
+        list: List of outliers in this set of results based on effort score
+    """
     scores = [(r, _effort_score(r, weights)) for r in results]
     values = [s for _, s in scores]
 
@@ -98,6 +151,15 @@ def _find_effort_outliers(results: list, weights: dict, k: float) -> list:
     return [r for r, s in scores if s > upper]
 
 def _find_runtime_outliers(results: list, k: float) -> list:
+    """ Finds the outliers using the runtime based method
+
+    Args:
+        results (list): Results from the experiments
+        k (float): Scalar to be used for the IQR whiskers
+
+    Returns:
+        list: List of outliers in this set of results based on runtime score
+    """
     values = [math.log1p(r["statistics"]["runtime"]) for r in results]
 
     if len(values) < 8:
@@ -107,6 +169,15 @@ def _find_runtime_outliers(results: list, k: float) -> list:
     return [r for r in results if math.log1p(r["statistics"]["runtime"]) > upper]
 
 def _find_pairs_and_triplets(puzzle: list, n: int) -> tuple[int, int]:
+    """ Find the number of pairs and triplets in a puzzle
+
+    Args:
+        puzzle (list): Puzzle grid
+        n (int): Size of the puzzle
+
+    Returns:
+        tuple[int, int]: Tuple containing the number of pairs and triplets
+    """
     pairs = 0
     triplets = 0
     for i in range(n):
@@ -135,6 +206,15 @@ def _find_pairs_and_triplets(puzzle: list, n: int) -> tuple[int, int]:
     return pairs, triplets
 
 def _find_isolated(puzzle: list, n: int) -> int:
+    """ Finds the number of isolated duplicates in a puzzle
+
+    Args:
+        puzzle (list): Puzzle grid
+        n (int): Size of the puzzle
+
+    Returns:
+        int: The number of isolated duplicates
+    """
     isolated = 0
     for i in range(n):
         row_map = {}
@@ -151,7 +231,7 @@ def _find_isolated(puzzle: list, n: int) -> int:
                 nk += 1
 
             v = puzzle[i][k]
-            row_map[v] = row_map.get(v, 0) + 1
+            row_map[v] = row_map.get(v, 0)+1
             k = nk
         
         k = 0
@@ -166,7 +246,7 @@ def _find_isolated(puzzle: list, n: int) -> int:
                 nk += 1
 
             v = puzzle[k][i]
-            col_map[v] = col_map.get(v, 0) + 1
+            col_map[v] = col_map.get(v, 0)+1
             k = nk
         
         for _, val in row_map.items():
@@ -178,6 +258,15 @@ def _find_isolated(puzzle: list, n: int) -> int:
     return isolated
 
 def _cross_duplicates(puzzle: list, n: int) -> int:
+    """ Number of entangled duplicates in the puzzle
+
+    Args:
+        puzzle (list): Puzzle grid
+        n (int): Size of the puzzle
+
+    Returns:
+        int: Number of entangled duplicates
+    """
     rows = [[False]*n for _ in range(n)]
     cols = [[False]*n for _ in range(n)]
 
@@ -197,6 +286,14 @@ def _cross_duplicates(puzzle: list, n: int) -> int:
     return sum(1 for i in range(n) for j in range(n) if rows[i][j] and cols[i][j])        
 
 def analyze_puzzle_statistics(results: list) -> dict:
+    """ Analyses a puzzle for certain patterns and statistics
+
+    Args:
+        results (list): Results from the experiments
+
+    Returns:
+        dict: A dict containing the statistics per puzzle per size
+    """
     puzzle_dict = {}
     for r in results:
         path = r["path"]
@@ -222,10 +319,29 @@ def analyze_puzzle_statistics(results: list) -> dict:
     return puzzle_dict
 
 def _extract_features(puzzle_stats: dict, size: int, group: list, feature: str) -> list:
+    """ Extract a certain puzzle feature from a puzzle group
+
+    Args:
+        puzzle_stats (dict): Statistics of the puzzles
+        size (int): Size of the puzzle
+        group (list): Group of which to extract stats from
+        feature (str): Feature to extract from group
+
+    Returns:
+        list: List of values for the feature in the group specified
+    """
     group_puzzle_names = [g["puzzle"] for g in group]
     return [puzzle_stats[size][puzzle][feature] for puzzle in group_puzzle_names]
 
 def run_all(results: list, solver: str = "qf_ia", k_out: float = 1.5, k_fout: float = 3.0) -> None:
+    """ Run all analysis
+
+    Args:
+        results (list): Results from the experiments
+        solver (str, optional): Solver that was used for evaluation. Defaults to "qf_ia".
+        k_out (float, optional): Scalar that is used for the IQR whiskers. Defaults to 1.5.
+        k_fout (float, optional): Scalar that is used for the far-out IQR whiskers. Defaults to 3.0.
+    """
     results = [r for r in results if r["solver"] == solver]
     results = _flatten_results(results)
     puzzle_statistics_by_size = analyze_puzzle_statistics(results)
@@ -236,6 +352,7 @@ def run_all(results: list, solver: str = "qf_ia", k_out: float = 1.5, k_fout: fl
         "propagations": 0.5,
     }
 
+    # Gather outliers
     all_outliers_runtime = {}
     all_outliers_effort = {}
     for size, r in sorted(grouped.items()):
@@ -257,6 +374,7 @@ def run_all(results: list, solver: str = "qf_ia", k_out: float = 1.5, k_fout: fl
 
         if len(runtime_only) >= 5:
             runtime_tests = []
+            # Extract a feature from the base and runtime set and use the MannWhitneyU test to check significance
             for feature in features:
                 base = _extract_features(puzzle_statistics_by_size, size, neither, feature)
                 a = _extract_features(puzzle_statistics_by_size, size, runtime_only, feature)
@@ -274,10 +392,11 @@ def run_all(results: list, solver: str = "qf_ia", k_out: float = 1.5, k_fout: fl
                 print("runtime_only vs neither:")
                 for (feature, p, med_a, med_b, avg_a, avg_b), q in zip(runtime_tests, adjusted_p):
                     star = " *" if q < 0.05 else ""
-                    print(f"{feature:20s} med={med_a:.2f}, avg={avg_a:.2f} vs {med_b:.2f}, avg={avg_b:.2f}  p={p:.3g}  q={q:.3g}{star}")
+                    print(f"{feature:20s} med={med_a:.2f}, avg={avg_a:.2f} vs {med_b:.2f}, avg={avg_b:.2f} | p={p:.3g} | q={q:.3g}{star}")
 
         if len(effort_only) >= 5:
             effort_tests = []
+            # Extract a feature from the base and effort set and use the MannWhitneyU test to check significance
             for feature in features:
                 base = _extract_features(puzzle_statistics_by_size, size, neither, feature)
                 a = _extract_features(puzzle_statistics_by_size, size, effort_only, feature)
@@ -295,11 +414,11 @@ def run_all(results: list, solver: str = "qf_ia", k_out: float = 1.5, k_fout: fl
                 print("effort_only vs neither:")
                 for (feature, p, med_b, med_base, avg_a, avg_b), q in zip(effort_tests, adjusted_p):
                     star = " *" if q < 0.05 else ""
-                    print(f"{feature:20s} med={med_a:.2f}, avg={avg_a:.2f} vs {med_b:.2f}, avg={avg_b:.2f}  p={p:.3g}  q={q:.3g}{star}")
+                    print(f"{feature:20s} med={med_a:.2f}, avg={avg_a:.2f} vs {med_b:.2f}, avg={avg_b:.2f} | p={p:.3g} | q={q:.3g}{star}")
 
-    print("\nSpearman rank correlations (all puzzles):")
+    print("Spearman rank correlations:")
     for size, result in sorted(grouped.items()):
-        print(f"\nSize {size}x{size}")
+        print(f"Size {size}x{size}")
 
         effort_values = [_effort_score(r, weights) for r in result]
         runtime_values = [r["statistics"]["runtime"] for r in result]
