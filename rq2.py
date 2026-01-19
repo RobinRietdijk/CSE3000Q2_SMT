@@ -1,10 +1,49 @@
 import numpy as np
 import scipy.stats
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from copy import deepcopy
 import os
-from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.colors import ListedColormap, BoundaryNorm, TwoSlopeNorm
 import matplotlib.patches as patches
+import scienceplots
+
+plt.style.use(['science','ieee'])
+
+# Custom settings for plots
+plt.rcParams.update({
+    "lines.linewidth": 0.8,
+    "lines.markersize": 1,
+    "legend.fontsize": 5,
+    "legend.title_fontsize": 5,
+    "axes.labelsize": 8,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "xtick.minor.visible": False,
+    "axes.grid.which": "major",
+    "xtick.major.size": 2.5,
+    "ytick.major.size": 2.5,
+    "ytick.minor.size": 1.5,
+    "xtick.major.width": 0.6,
+    "ytick.major.width": 0.6,
+    "ytick.minor.width": 0.5,
+    "xtick.top": False,
+    "ytick.right": False,
+    "xtick.bottom": True,
+    "ytick.left": True,
+    "axes.grid": True,
+    "axes.grid.which": "major",
+    "grid.color": "0.85",
+    "grid.alpha": 0.6,
+    "grid.linewidth": 0.6,
+    "grid.linestyle": "-", 
+})
+
+colors = ["#D62728", "#006BA4", "#8C564B", "#2CA02C", "#7B4EA3", "#FF800E", "#E43D96"]
+
+LINE_STYLES = ["-", "--", "-.", ":"]
 
 def _flatten_results(results: list) -> list:
     """ Flattens the results from multiple runs into a single value
@@ -45,9 +84,9 @@ def _encoding_total(result: dict) -> int:
     Returns:
         int: The number for the encoding size
     """
-    enc = result["statistics"]["encoding_size"]
-    vars = sum(enc[k] for k in enc.keys() if k != "assertions")
-    return int(vars+enc["assertions"])
+    encoding = result["statistics"]["encoding_size"]
+    vars = sum(encoding[k] for k in encoding.keys() if k != "assertions")
+    return int(vars+encoding["assertions"])
 
 def _short_label(name: str, baseline: str) -> str:
     """ Get the name of the solver without the baseline part
@@ -282,24 +321,19 @@ def _print_wolcoxon(relevance: dict) -> None:
     print(f"Relevant constraints: {len(relevant)} / {len(relevance)}")
     print(f"Irrelevant constraints: {len(not_relevant)} / {len(relevance)}")
 
-    max_list = 10**9
     if not_relevant:
         print("- Irrelevant (no significant size) -")
-        for c, _ in not_relevant[:max_list]:
-            print(f" {c}")
-        if len(not_relevant) > max_list:
-            print(f" ... ({len(not_relevant) - max_list} more)")
+        for c, _ in not_relevant:
+            print(f"{c}")
 
     if relevant:
         print("- Relevant (significant at >0 size) -")
-        for c, r in relevant[:max_list]:
+        for c, r in relevant:
             parts = []
             for n in r["sizes"]:
                 d = r["directions"].get(n, 0)
                 parts.append(f"{n}:{'faster' if d == 1 else 'slower' if d == -1 else 'n/a'}")
             print(f" {c}: {', '.join(parts)}")
-        if len(relevant) > max_list:
-            print(f" ... ({len(relevant) - max_list} more)")
 
 def _plot_significance_heatmap(constraint_labels: list, size_order: list, significance_grid: np.ndarray) -> None:
     """ Plot a heatmap to showcase significance puzzle sizes per constraint
@@ -320,7 +354,7 @@ def _plot_significance_heatmap(constraint_labels: list, size_order: list, signif
     ax.minorticks_off()
     x = np.arange(n_cols+1)
     y = np.arange(n_rows+1)
-    m = ax.pcolormesh(x, y, significance_grid, cmap=cmap, norm=norm, shading="flat", edgecolors="0.85", linewidth=0.6)
+    m = ax.pcolormesh(x, y, significance_grid, cmap=cmap, norm=norm, edgecolors="0.85", linewidth=0.6)
 
     ax.invert_yaxis()
     ax.set_yticks(np.arange(n_rows)+0.5)
@@ -334,11 +368,6 @@ def _plot_significance_heatmap(constraint_labels: list, size_order: list, signif
     ax.set_ylabel("Redundant constraint")
     ax.set_title("Wilcoxon vs baseline: significant slower / n.s. / faster", fontsize=8)
 
-    full_slower_rows = [i for i in range(n_rows) if np.all(significance_grid[i, :] == -1)]
-    for i in full_slower_rows:
-        rect = patches.Rectangle((0, i), n_cols, 1, facecolor="white", alpha=0.55, edgecolor="none", zorder=3)
-        ax.add_patch(rect)
-
     cbar = fig.colorbar(m, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_ticks([-1, 0, 1])
     cbar.set_ticklabels(["slower", "n.s.", "faster"])
@@ -350,7 +379,7 @@ def _plot_significance_heatmap(constraint_labels: list, size_order: list, signif
     plt.close(fig)
     print(f"Saved {out_path}")
 
-def summarize_speedup_by_constraint(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None) -> dict:
+def _summarize_speedup_by_constraint(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None) -> dict:
     """ Summarize the total speedup gained per constraint against the baseline solver
 
     Args:
@@ -392,7 +421,7 @@ def summarize_speedup_by_constraint(results: list, baseline: str, constraints: l
 
     return out
 
-def summarize_encoding_ratio_by_constraint(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None) -> dict:
+def _summarize_encoding_ratio_by_constraint(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None) -> dict:
     """ Summarize the encoding size ratios based on the baseline for each redundant constraint added
 
     Args:
@@ -422,8 +451,8 @@ def summarize_encoding_ratio_by_constraint(results: list, baseline: str, constra
     out = {constraint: {} for constraint in constraints}
     for constraint in constraints:
         for n in sizes:
-            base_list = totals.get(baseline, {}).get(n, [])
-            constraint_list = totals.get(constraint, {}).get(n, [])
+            base_list = totals[baseline][n]
+            constraint_list = totals[constraint][n]
             if not base_list or not constraint_list:
                 out[constraint][n] = {"baseline_total": None, "solver_total": None, "ratio": float("nan")}
                 continue
@@ -447,10 +476,6 @@ def print_constraint_summary(speedups: dict, encoding_size_stats: dict, *, sizes
     if sizes is None:
         sizes = sorted({n for constraint in speedups for n in speedups[constraint].keys()})
 
-    if not sizes:
-        print("No sizes found.")
-        return
-
     n_max = max(sizes)
 
     print(f"Baseline: {baseline}")
@@ -459,21 +484,161 @@ def print_constraint_summary(speedups: dict, encoding_size_stats: dict, *, sizes
     for constraint in sorted(speedups.keys()):
         values = []
         for n in sizes:
-            value = speedups[constraint].get(n, {}).get("speedup", float("nan"))
+            value = speedups[constraint][n].get("speedup", float("nan"))
             if np.isfinite(value):
                 values.append((n, value))
 
         best = max(values, key=lambda t: t[1]) if values else (None, float("nan"))
         worst = min(values, key=lambda t: t[1]) if values else (None, float("nan"))
 
-        speedup_at_max = speedups[constraint].get(n_max, {}).get("speedup", float("nan"))
-        size_at_max = encoding_size_stats.get(constraint, {}).get(n_max, {}).get("ratio", float("nan"))
+        speedup_at_max = speedups[constraint][n_max].get("speedup", float("nan"))
+        size_at_max = encoding_size_stats[constraint][n_max].get("ratio", float("nan"))
 
         print(f"{constraint}:")
         print(f" best speedup: n={best[0]} | {best[1]:.3g}x")
         print(f" worst speedup: n={worst[0]} | {worst[1]:.3g}x")
         print(f" speedup at {n_max}: {speedup_at_max:.3g}x")
         print(f" encoding_ratio at {n_max}: {size_at_max:.3g}x")
+
+def _speedup_grid(constraint_order, size_order, matrix: dict, relevance: dict, baseline: str):
+    grid = np.full((len(constraint_order), len(size_order)), np.nan, dtype=float)
+
+    for i, c in enumerate(constraint_order):
+        significant = set(relevance[c]["sizes"])
+        for j, n in enumerate(size_order):
+            speedup = matrix[c][n]["speedup"]
+            if not np.isfinite(speedup) or speedup <= 0:
+                continue
+            if n not in significant:
+                continue
+
+            grid[i, j] = speedup
+
+    constraint_labels = [_short_label(c, baseline) for c in constraint_order]
+    return constraint_labels, size_order, grid
+
+def _plot_speedup_heatmap(constraint_labels: list, size_order: list, speedup_grid: np.ndarray) -> None:
+    n_rows, n_cols = speedup_grid.shape
+    fig_h = max(2.6, 0.32*n_rows+1.2)
+    fig_w = max(6.0, 0.38*n_cols+2.2)
+    cmap = plt.get_cmap("RdBu_r").copy()
+    cmap.set_bad(color="white")
+    vmin = np.min(speedup_grid[np.isfinite(speedup_grid)])
+    difference = 1-vmin
+    print(vmin)
+    norm = TwoSlopeNorm(vcenter=1.0, vmin=vmin, vmax=1+difference)
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    ax.grid(False)
+    ax.minorticks_off()
+    x = np.arange(n_cols+1)
+    y = np.arange(n_rows+1)
+    m = ax.pcolormesh(x, y, speedup_grid, cmap=cmap, norm=norm, edgecolors="0.85", linewidth=0.6)
+    
+    mask = ~np.isfinite(speedup_grid)
+    for i in range(n_rows):
+        for j in range(n_cols):
+            if mask[i, j]:
+                ax.add_patch(patches.Rectangle((j, i), 1, 1, facecolor="none", hatch="///", edgecolor="0.6", linewidth=0.0))
+
+    ax.invert_yaxis()
+    ax.set_yticks(np.arange(n_rows)+0.5)
+    ax.set_xticks(np.arange(n_cols)+0.5)
+    ax.set_xticklabels([str(n) for n in size_order], fontsize=7)
+    ax.set_yticklabels(constraint_labels, fontsize=7)
+
+    ax.set_xlabel("Puzzle size (n)")
+    ax.set_ylabel("Redundant constraint")
+    ax.set_title("Wilcoxon vs baseline: speedup on significant sizes", fontsize=8)
+
+    cbar = fig.colorbar(m, ax=ax, fraction=0.03, pad=0.02)
+    cbar.set_label("speedup = median(baseline)/median(solver)", fontsize=7)
+    cbar.ax.tick_params(labelsize=6)
+
+    fig.subplots_adjust(left=0.18, right=0.98, bottom=0.14, top=0.92)
+    out_path = os.path.join(os.path.abspath("plots"), f"heatmap_speedups.png")
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved {out_path}")
+
+def _summarize_runtime(results: list) -> list:
+    """ Create a summary of the runtime statistics
+
+    Args:
+        results (list): Results to be analysed
+
+    Returns:
+        list: Summary of runtime statistics
+    """
+    # Sort by puzzle
+    by_puzzle = {}
+    for r in results:
+        key = (r["solver"], r["size"], r["puzzle"])
+        if key not in by_puzzle:
+            by_puzzle[key] = []
+        by_puzzle[key].append(r["statistics"]["runtime"])
+
+    # Flatten the puzzles with multiple runs
+    per_puzzle = []
+    for (solver, size, _), times in by_puzzle.items():
+        per_puzzle.append((solver, size, np.median(times)))
+
+    # Sort by puzzle size
+    by_size = {}
+    for (solver, size, runtime) in per_puzzle:
+        key = (solver, size)
+        if key not in by_size:
+            by_size[key] = []
+        by_size[key].append(runtime)
+
+    summary = []
+    for (solver, size), runtimes in by_size.items():
+        times = np.array(runtimes)
+        summary.append({
+            "solver": solver,
+            "size": size,
+            "runs": len(times),
+            "median": float(np.median(times)),
+        })
+    
+    return sorted(summary, key=lambda x: (x["size"], x["solver"]))
+
+def _plot_runtime_per_size(results: list, baseline: str, constraints: list, sizes: list) -> None:
+    summary = _summarize_runtime(results)
+
+    fig, ax = plt.subplots()
+    ax.set_prop_cycle(color=colors)
+
+    # To make sure the legend and colors stay the same between experiments, we use a solver order argument
+    for i, solver in enumerate([baseline] + constraints):
+        z = 10+(len(constraints)-i)
+        x = []
+        y = []
+        for r in summary:
+            if r["solver"] == solver:
+                if r["size"] in sizes:
+                    x.append(r["size"])
+                    y.append(r["median"])
+        ax.plot(x, y, marker=".", linestyle=LINE_STYLES[i%len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
+    
+    ax.set_xlabel("Puzzle size (n)")
+    ax.set_ylabel("Median runtime (s)")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    legend = ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(0.02, 0.98),
+        frameon=True,
+        framealpha=0.85,
+        fancybox=False
+    )
+    legend.set_zorder(20+len(constraints))
+    frame = legend.get_frame()
+    frame.set_alpha(0.75)
+    fig.tight_layout()
+    out_path = os.path.join(os.path.abspath("plots"), f"redundant_runtime_v_size.png")
+    fig.savefig(out_path)
+    plt.close()
+    print(f"Saved {out_path}")
 
 def run_wilcoxon(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None, alpha: float = 0.05, print_results: bool = True) -> None:
     """ Run the RQ2 analysis
@@ -490,11 +655,13 @@ def run_wilcoxon(results: list, baseline: str, constraints: list|None = None, si
     p_matrix = _wilcoxon_by_constraint(flattened_results, baseline, constraints, sizes)
     relevance_stats = _classify_constraints(p_matrix, alpha)
 
-    _, constraint_labels, size_order, significance_grid = _significance_grid(p_matrix, relevance_stats, baseline)
+    constraint_order, constraint_labels, size_order, significance_grid = _significance_grid(p_matrix, relevance_stats, baseline)
     if print_results:
         _print_wolcoxon(relevance_stats)
-    _plot_significance_heatmap(constraint_labels, size_order, significance_grid)
-    speedup = summarize_speedup_by_constraint(flattened_results, baseline, constraints, sizes)
-    encoding_size_stats = summarize_encoding_ratio_by_constraint(flattened_results, baseline, constraints, sizes)
-
+    # _plot_significance_heatmap(constraint_labels, size_order, significance_grid)
+    speedup = _summarize_speedup_by_constraint(flattened_results, baseline, constraints, sizes)
+    encoding_size_stats = _summarize_encoding_ratio_by_constraint(flattened_results, baseline, constraints, sizes)
+    # constraint_labels2, size_order2, speedup_grid = _speedup_grid(constraint_order, size_order, speedup, relevance_stats, baseline)
+    # _plot_speedup_heatmap(constraint_labels2, size_order2, speedup_grid)
+    _plot_runtime_per_size(results, baseline, constraints, sizes)
     print_constraint_summary(speedup, encoding_size_stats, sizes=size_order, baseline=baseline)

@@ -35,6 +35,7 @@ SOLVERS = {
     "qf_bv": z3solver.qf_bv,
     "qf_bool": z3solver.boolean,
     "qf_ia-c": z3solver.lazy,
+    "lazy": z3solver.lazy
 }
 
 # Available constraints that can be added using the CLI
@@ -283,7 +284,7 @@ def _analyze_command(args: dict) -> None:
         rq1.print_rq1_text_stats(results, report_sizes=[5, 6, 7, 8, 9, 13, 21, 25])
         rq1.print_encoding_text_stats(results, report_sizes=[10, 25])
     if args.analysis == "rq2":
-        rq2.run_wilcoxon(results, "qf_ia")
+        rq2.run_wilcoxon(results, "qf_ia", constraints=["qf_ia+sp", "qf_ia+pi", "qf_ia+wb", "qf_ia+wn", "qf_ia+lw", "qf_ia+ce"], sizes=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25])
     if args.analysis == "rq3":
         rq3.run_all(results, k_out=1.5, k_fout=3.0)
     if args.analysis =="write_csv":
