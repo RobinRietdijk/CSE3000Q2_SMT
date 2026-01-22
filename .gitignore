@@ -4,3 +4,4 @@ venv
 solutions
 plots
 puzzles*
+*.csv
