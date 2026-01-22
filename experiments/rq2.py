@@ -658,10 +658,10 @@ def run_wilcoxon(results: list, baseline: str, constraints: list|None = None, si
     constraint_order, constraint_labels, size_order, significance_grid = _significance_grid(p_matrix, relevance_stats, baseline)
     if print_results:
         _print_wolcoxon(relevance_stats)
-    # _plot_significance_heatmap(constraint_labels, size_order, significance_grid)
+    _plot_significance_heatmap(constraint_labels, size_order, significance_grid)
     speedup = _summarize_speedup_by_constraint(flattened_results, baseline, constraints, sizes)
     encoding_size_stats = _summarize_encoding_ratio_by_constraint(flattened_results, baseline, constraints, sizes)
     # constraint_labels2, size_order2, speedup_grid = _speedup_grid(constraint_order, size_order, speedup, relevance_stats, baseline)
     # _plot_speedup_heatmap(constraint_labels2, size_order2, speedup_grid)
-    _plot_runtime_per_size(results, baseline, constraints, sizes)
+    # _plot_runtime_per_size(results, baseline, constraints, sizes)
     print_constraint_summary(speedup, encoding_size_stats, sizes=size_order, baseline=baseline)

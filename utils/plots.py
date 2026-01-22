@@ -1,8 +1,6 @@
-import os
 import matplotlib.pyplot as plt
 import scienceplots
 import scipy
-import numpy as np
 
 plt.style.use(['science','ieee'])
 

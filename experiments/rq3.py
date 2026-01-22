@@ -1,8 +1,7 @@
-
 import math
 import numpy as np
 from collections import Counter
-from file_utils import read_puzzle
+from utils.file_utils import read_puzzle
 from scipy.stats import mannwhitneyu, false_discovery_control, spearmanr
 
 def _flatten_results(results: list) -> list:

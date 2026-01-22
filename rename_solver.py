@@ -1,6 +1,6 @@
 import os
 import argparse
-from file_utils import read_csv, write_csv
+from utils.file_utils import read_csv, write_csv
 
 def _rename_command(args: dict) -> None:
     csv = read_csv(args.path)

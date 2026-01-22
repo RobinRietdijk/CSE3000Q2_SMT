@@ -1,6 +1,5 @@
 import os
 import sys
-import ast
 import csv
 
 PUZZLE_EXTENSIONS = [".singles"]

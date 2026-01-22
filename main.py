@@ -1,19 +1,18 @@
 import argparse
 import time
 import os
-import z3solver
+import solver.z3solver as z3solver
 import hashlib
-import shutil
-import z3solver_locals
-import z3solver_globals
-import rq1
-import rq2
-import rq3
-import plots
+import solver.z3solver_locals as z3solver_locals
+import solver.z3solver_globals as z3solver_globals
+import experiments.rq1 as rq1
+import experiments.rq2 as rq2
+import experiments.rq3 as rq3
+import utils.plots as plots
 from datetime import datetime
-from file_utils import read_puzzle, read_puzzle_dir, read_solution, read_solution_dir, write_file, append_comment, write_csv,read_csv, read_csv_folder
+from utils.file_utils import read_puzzle, read_puzzle_dir, read_solution, read_solution_dir, write_file, append_comment, write_csv,read_csv, read_csv_folder
 from utils import format_elapsed
-from checker import check_puzzle
+from solution_checker.checker import check_puzzle
 
 # Default path to the puzzle folder
 PUZZLES_FOLDER = os.path.abspath("puzzles")
@@ -285,7 +284,8 @@ def _analyze_command(args: dict) -> None:
         rq1.print_rq1_text_stats(results, report_sizes=[5, 6, 7, 8, 9, 13, 21, 25])
         rq1.print_encoding_text_stats(results, report_sizes=[10, 25])
     if args.analysis == "rq2":
-        rq2.run_wilcoxon(results, "qf_ia", constraints=["qf_ia+sp", "qf_ia+pi", "qf_ia+wb", "qf_ia+wn", "qf_ia+lw", "qf_ia+ce"], sizes=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25])
+        # rq2.run_wilcoxon(results, "qf_ia", constraints=["qf_ia+sp", "qf_ia+pi", "qf_ia+wb", "qf_ia+wn", "qf_ia+lw", "qf_ia+ce"], sizes=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25])
+        rq2.run_wilcoxon(results, "lazy")
     if args.analysis == "rq3":
         rq3.run_all(results, k_out=1.5, k_fout=3.0)
     if args.analysis =="write_csv":
