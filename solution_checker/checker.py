@@ -1,7 +1,7 @@
 from collections import deque
 
 # This solution checker was made as part of the collaboration of this project
-# The original author of this specific implementation is Sophieke van Luenen
+# The original author of this specific implementation is Sophieke van Luenen (https://github.com/Sophieke32)
 
 def check_puzzle(solution: list) -> bool:
     """ Checks the validity of a solution
