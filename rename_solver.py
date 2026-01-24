@@ -3,6 +3,11 @@ import argparse
 from utils.file_utils import read_csv, write_csv
 
 def _rename_command(args: dict) -> None:
+    """ Command to rename a solver inside a csv file. Invoked though the CLI
+
+    Args:
+        args (dict): CLI arguments given for this command
+    """
     csv = read_csv(args.path)
     for i in csv:
         i["solver"] = args.new_name

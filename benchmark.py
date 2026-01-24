@@ -48,6 +48,7 @@ SOLVER_COLORS = {
     "gurobi": "#7B4EA3",
 }
 
+# Set the line styles for solvers to be used in plots
 SOLVER_LINE_STYLES = {
     "z3": "-", 
     "asp": "--", 
@@ -57,9 +58,18 @@ SOLVER_LINE_STYLES = {
 }
 
 def _read_files(path: str) -> dict:
+    """ Read the csv files generated from the benchmarking process
+
+    Args:
+        path (str): Path to the folder which holds the csv files
+
+    Returns:
+        dict: A dictionary containing the benchmark data for each solver in the csv folder
+    """
     benchmarks = {}
     folder = Path(path)
     for file in folder.iterdir():
+        # Ignore all other files
         if file.suffix == ".csv":
             solver_name = file.stem
             df = pd.read_csv(file)
@@ -67,12 +77,16 @@ def _read_files(path: str) -> dict:
     return benchmarks
 
 def _plot(results: dict, solver_order: list) -> None:
+    """ Plot the results from the benchmarking process
+
+    Args:
+        results (dict): Results from all solvers
+        solver_order (list): Order of the solvers to plot
+    """
     fig, ax = plt.subplots()
 
     for i, solver in enumerate(solver_order):
         z = 10+(len(solver_order)-i)
-        x = []
-        y = []
 
         by_size = {}
         for r in results[solver]:
@@ -104,9 +118,15 @@ def _plot(results: dict, solver_order: list) -> None:
     plt.close()
     print(f"Saved {out_path}")
 
-def main():
-    results = _read_files("csvs/benchmark/internal")
-    _plot(results, ["prolog", "gurobi", "z3", "pumpkin", "asp"])
+def main() -> None:
+    """ 
+    Read the csv files and plot the median runtimes per puzzle size for all given solvers
+    """
+    csv_path = "csvs/benchmark/internal"
+    solver_order = ["prolog", "gurobi", "z3", "pumpkin", "asp"]
+
+    results = _read_files(csv_path)
+    _plot(results, solver_order)
 
 if __name__ == "__main__":
     main()
