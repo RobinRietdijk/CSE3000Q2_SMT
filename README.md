@@ -1,5 +1,5 @@
 # Hitori solver using Satisfiability Modulo Theories (SMT)
-This repository is part of the CSE3000 Research Project (2025/26 Q2) course of TU Delft.
+This repository is part of the [CSE3000 Research Project](https://github.com/TU-Delft-CSE/Research-Project) (2025/26 Q2) course of [TU Delft](https://github.com/TU-Delft-CSE).
 
 This repository contains the code used during the experiments of my thesis, along with a variety of SMT encodings for the Hitori puzzle.
 
