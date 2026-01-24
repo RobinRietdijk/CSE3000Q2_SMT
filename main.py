@@ -350,7 +350,7 @@ if __name__ == "__main__":
     check_parser.set_defaults(func=_check_command)
 
     # Command for analyzing difficulty
-    analyze_parser = subparsers.add_parser("analyze", help="Analyze puzzle difficulty using the SMT solver")
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze puzzles and results using the SMT solver")
     analyze_parser.add_argument("analysis", choices=ANALYSIS_OPTIONS, help="Analysis mode")
     group_analyze = analyze_parser.add_mutually_exclusive_group(required=True)
     group_analyze.add_argument("-f", "--file", action="append", type=str, help="Path to a puzzle file")
